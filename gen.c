@@ -4,21 +4,27 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <time.h>
-#define _USE_MATH_DEFINES
+
+#ifdef _WIN32
+    #define _USE_MATH_DEFINES
+#endif
 #include <math.h>
 
-#define SHOW_IMAGE
+// #define SHOW_IMAGE
 
-#define width 128
-#define height 128
+#define PI            (3.14159265359)
+#define width         (500)
+#define height        (500)
+#define COMP          (4)
 
 typedef unsigned char byte;
+struct                pixel;
 
-void write_texture(struct pixel *pixels, const char *path, int w, int h);
-void generate_noise();
-double smooth_noise(double x, double y);
-double turbulence(double x, double y, double size);
-inline byte *to_bytearray(struct pixel *pixels);
+void                  write_texture(struct pixel *pixels, const char *path, int w, int h);
+void                  generate_noise();
+double                smooth_noise(double x, double y);
+double                turbulence(double x, double y, double size);
+byte                  *to_bytearray(struct pixel *pixels);
 
 struct pixel {
     byte r;
@@ -30,7 +36,7 @@ struct pixel {
 double noise[width * height];
 
 void write_texture(struct pixel *pixels, const char *path, int w, int h) {
-    stbi_write_png(path, w, h, 4, to_bytearray(pixels), w * 4);
+    stbi_write_png(path, w, h, COMP, to_bytearray(pixels), w * COMP);
 }
 
 // Uses bilinear-interpolation
@@ -56,17 +62,18 @@ double smooth_noise(double x, double y) {
 
 double turbulence(double x, double y, double size) {
     double value = 0.0, inital_size = size;
+    double result;
     
     while (size >= 1) {
         value += smooth_noise(x / size, y / size) * size;
         size = size / 2.0;
     }
 
-    double result = 128 * value / inital_size;
+    result = 128 * value / inital_size;
     return result;
 }
 
-inline byte *to_bytearray(struct pixel *pixels) {
+byte *to_bytearray(struct pixel *pixels) {
     return (byte*)(pixels);
 }
 
@@ -87,23 +94,42 @@ int main() {
     double x_period = 0;
     double y_period = 1;
     double turbulence_power = 2.5;
-    double turbulence_size = 32;
+    double turbulence_size = 50;
 
     int x, y;
     for (x = 0; x < width; x++) {
         for (y = 0; y < height; y++) {
             struct pixel *pix = &(pixels[x + y * width]);
-            double xy_value = x * x_period / width + y * y_period / height + turbulence_power * turbulence(x, y, turbulence_size) / 256.0;
-            double sin_value = 256 * fabs(sin(xy_value * M_PI));
-            pix->r = pix->g = pix->b = (uint8_t)(sin_value);
-            pix->a = 255;
+            
+            double x_value = x * x_period / width;
+            double y_value = y * y_period / height;
+            double turb_value = turbulence_power * turbulence(x, y, turbulence_size) / 256.0;
 
+            double xy_value = x_value + y_value + turb_value;
+            uint8_t sin_value =(uint8_t)(256 * fabs(sin(xy_value * PI)) * 1.5);
+            
+            if(sin_value < (255/4)) {
+                pix->r = sin_value * 2;
+            } else {
+                pix->r = sin_value / 8;
+            }
+            
+            pix->g = (double) sin_value / 1.5;
+            if(sin_value > 255 - (255/6)) {
+                pix->b = sin_value * 2;
+            } else {
+                pix->b = sin_value / 4;
+            }
+            pix->a = 255;
         }
     }
+
     write_texture(pixels, "output.png", width, height);
+
 #ifdef SHOW_IMAGE
     system("output.png");
 #endif
+
     free(pixels);
     return 0;
 }
